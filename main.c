@@ -7,6 +7,7 @@
 #include <jack/midiport.h>
 
 #define DEFAULT_NTRIALS 1000
+#define MIDI_NOTE_ON_CHAN1 144
 
 jack_client_t *jackClient;
 jack_port_t *jackPortIn;
@@ -28,20 +29,20 @@ static int _jack_callback(jack_nframes_t nframes, void *arg) {
     for (int i=0; i<eventCount; i++) {
 
         jack_midi_event_get(&ev, portBuf, i);
-        clock_gettime(CLOCK_MONOTONIC, &t);
-        times[idx] = t;
-        idx++;
+
+        if (ev.buffer[0] == MIDI_NOTE_ON_CHAN1) { // only record note-on events
+            clock_gettime(CLOCK_MONOTONIC, &t);
+            times[idx] = t;
+            idx++;
+        }
 
         if (idx == ntrials) { // we're done: output the log, clean up and exit
-
             for (idx=0; idx<ntrials; idx++) {
                 t = times[idx];
                 printf("%.8f\n", t.tv_sec + t.tv_nsec/1e9);
             }
-
             free(times);
             exit(0);
-
         }
 
     }
