@@ -12,18 +12,18 @@
 jack_client_t *jackClient;
 jack_port_t *jackPortIn;
 
-struct timespec *times;
+jack_nframes_t *times_frames;
 int idx = 0;
 int ntrials;
 
 static int _jack_callback(jack_nframes_t nframes, void *arg) {
 
+    jack_nframes_t periodStart_frames;
+
     void *portBuf; // cannot be cached! see jack.h
     portBuf = jack_port_get_buffer(jackPortIn, nframes);
 
     jack_nframes_t eventCount = jack_midi_get_event_count(portBuf);
-
-    struct timespec t;
 
     jack_midi_event_t ev;
     for (int i=0; i<eventCount; i++) {
@@ -31,17 +31,19 @@ static int _jack_callback(jack_nframes_t nframes, void *arg) {
         jack_midi_event_get(&ev, portBuf, i);
 
         if (ev.buffer[0] == MIDI_NOTE_ON_CHAN1) { // only record note-on events
-            clock_gettime(CLOCK_MONOTONIC, &t);
-            times[idx] = t;
+
+            periodStart_frames = jack_last_frame_time(jackClient);
+            times_frames[idx] = periodStart_frames + ev.time;
             idx++;
+
         }
 
         if (idx == ntrials) { // we're done: output the log, clean up and exit
             for (idx=0; idx<ntrials; idx++) {
-                t = times[idx];
-                printf("%.8f\n", t.tv_sec + t.tv_nsec/1e9);
+                // print time in sec
+                printf("%.6f\n", jack_frames_to_time(jackClient, times_frames[idx]) / 1e6);
             }
-            free(times);
+            free(times_frames);
             exit(0);
         }
 
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
         ntrials = DEFAULT_NTRIALS;
     }
 
-    times = (struct timespec*) malloc(ntrials*sizeof(struct timespec));
+    times_frames = (jack_nframes_t*) malloc(ntrials*sizeof(jack_nframes_t));
 
     jackClient = jack_client_open("rxTiming", JackNullOption, NULL);
 
@@ -79,7 +81,7 @@ int main(int argc, char **argv) {
         usleep(1000);
     }
 
-    free(times);
+    free(times_frames);
     return 0;
 
 }
